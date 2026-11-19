@@ -1,0 +1,66 @@
+name: Release
+
+# Bump "## Version:" in QuestPlanner.toc and push to main: if tag v<version> doesn't
+# exist yet, this tags the commit, builds the zip and uploads it to CurseForge
+# (needs the CF_API_KEY secret + X-Curse-Project-ID in the .toc) and GitHub Releases.
+# Optional: Wago Addons (WAGO_API_TOKEN secret + "## X-Wago-ID:" in the .toc) and WoWInterface
+# (WOWI_API_TOKEN secret + "## X-WoWI-ID:" in the .toc). Without both parts a site is skipped.
+# Pushes that don't change the version publish nothing.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      CF_API_KEY: ${{ secrets.CF_API_KEY }}   # missing secret = CurseForge upload skipped
+      WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}   # optional, with X-Wago-ID in QuestPlanner.toc
+      WOWI_API_TOKEN: ${{ secrets.WOWI_API_TOKEN }}   # optional, with X-WoWI-ID in QuestPlanner.toc
+      GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Tag new version
+        id: tag
+        run: |
+          v=$(grep -m1 '^## Version:' QuestPlanner.toc | sed 's/^## Version:[[:space:]]*//' | tr -d '\r[:space:]')
+          if [ -z "$v" ]; then echo "No version in QuestPlanner.toc"; exit 1; fi
+          if git rev-parse -q --verify "refs/tags/v$v" >/dev/null; then
+            # Tag exists. Publish only if it points at this commit and has no GitHub release yet
+            # (e.g. the tag was pushed by hand because the workflow couldn't push it).
+            code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $GITHUB_OAUTH" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/tags/v$v")
+            if [ "$(git rev-list -n1 "v$v")" = "$(git rev-parse HEAD)" ] && [ "$code" = "404" ]; then
+              echo "v$v is tagged on this commit but not released yet; publishing."
+              echo "release=true" >> "$GITHUB_OUTPUT"
+              echo "tag=v$v" >> "$GITHUB_OUTPUT"
+            else
+              echo "v$v already released; nothing to publish."
+              echo "release=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            git tag "v$v"
+            if ! git push origin "v$v"; then
+              echo "::error::The workflow token can't push tags. In the repo: Settings > Actions > General > Workflow permissions = Read and write, and check Settings > Rules for tag rules. Or push the tag yourself: git tag v$v && git push origin v$v, then re-run this workflow."
+              exit 1
+            fi
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            echo "tag=v$v" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The packager action refuses to build on a branch push when a tag points at HEAD
+      # ("Found future tag ..., not packaging"), because it expects the tag push to start a
+      # second run. Tags pushed by this workflow don't start runs, so run the packager's
+      # script directly and tell it this is a tag build.
+      - name: Package and upload
+        if: steps.tag.outputs.release == 'true'
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/BigWigsMods/packager/v2/release.sh -o "$RUNNER_TEMP/release.sh"
+          GITHUB_REF="refs/tags/${{ steps.tag.outputs.tag }}" GITHUB_REF_NAME="${{ steps.tag.outputs.tag }}" \
+            bash "$RUNNER_TEMP/release.sh"

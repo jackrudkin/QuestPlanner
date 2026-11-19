@@ -1,0 +1,17 @@
+package-as: QuestPlanner
+
+# CurseForge relations (project slugs)
+required-dependencies:
+  - questie
+optional-dependencies:
+  - pawn
+  - tomtom
+
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
+
+ignore:
+  - .github
+  - tests
+  - .luacheckrc
