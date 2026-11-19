@@ -5,6 +5,7 @@
 
 local _, QP = ...
 local D = QP.Data
+local U = QP.Upgrades
 local pcallret = D.pcallret
 local floor, max, min = math.floor, math.max, math.min
 
@@ -14,7 +15,8 @@ local ROW_H = 34
 local PAD_TOP, PAD_BOTTOM = 62, 30
 
 local frame, tabs, list, detail, statusText, progressBar
-local activeTab = 1
+local TAB_BROWSE, TAB_NEAR, TAB_UPGRADES, TAB_PLAN = 1, 2, 3, 4
+local activeTab = TAB_BROWSE
 local selectedId
 local history = {}
 local filters = { mineOnly = true, hideDone = true, gearOnly = false, zoneOnly = false }
@@ -218,7 +220,7 @@ end
 ---------------------------------------------------------------------------
 -- Toolbar (search + filters) above the list
 ---------------------------------------------------------------------------
-local searchBox, minBox, maxBox, planBar
+local searchBox, minBox, maxBox, planBar, upBar
 
 local function tooltipFor(widget, text, anchor)
   widget:SetScript("OnEnter", function(self)
@@ -324,6 +326,56 @@ local function buildToolbar()
   planBar.summary:SetPoint("LEFT", b3, "RIGHT", 14, 0)
   planBar.summary:SetPoint("RIGHT", -8, 0)
   planBar.summary:SetJustifyH("LEFT")
+
+  -- Upgrades tab toolbar
+  upBar = CreateFrame("Frame", nil, frame)
+  upBar:SetAllPoints(bar)
+  upBar:Hide()
+  local aheadLabel = upBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  aheadLabel:SetPoint("LEFT", 10, 0)
+  aheadLabel:SetText("Quests up to")
+  local ahead = create("EditBox", nil, upBar, "InputBoxTemplate")
+  ahead:SetSize(24, 20)
+  ahead:SetPoint("LEFT", aheadLabel, "RIGHT", 10, 0)
+  ahead:SetAutoFocus(false)
+  ahead:SetNumeric(true)
+  ahead:SetMaxLetters(2)
+  ahead:SetJustifyH("CENTER")
+  local aheadTail = upBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  aheadTail:SetPoint("LEFT", ahead, "RIGHT", 6, 0)
+  aheadTail:SetText("levels above you")
+  local function applyAhead(self)
+    local n = tonumber(self:GetText())
+    if n and n ~= U.Settings().ahead then U.Settings().ahead = n; U.MarkDirty(); refreshList() end
+  end
+  ahead:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+  ahead:SetScript("OnEditFocusLost", applyAhead)
+  tooltipFor(ahead, "How many levels above you a quest's required level may be. Press Enter to apply.")
+  upBar.ahead = ahead
+
+  local avail = create("CheckButton", nil, upBar, "UICheckButtonTemplate")
+  avail:SetSize(22, 22)
+  avail:SetPoint("LEFT", aheadTail, "RIGHT", 14, 0)
+  local atext = avail.Text or avail.text or avail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  atext:ClearAllPoints()
+  atext:SetPoint("LEFT", avail, "RIGHT", 0, 1)
+  setFont(atext, "GameFontHighlightSmall")
+  atext:SetText("Available now")
+  avail:SetScript("OnClick", function(self) U.Settings().availableOnly = self:GetChecked() and true or false; refreshList() end)
+  tooltipFor(avail, "Hide quests you can't take yet (level too low or prerequisites missing).")
+  upBar.avail = avail
+
+  local rescan = create("Button", nil, upBar, "UIPanelButtonTemplate")
+  rescan:SetSize(80, 22)
+  rescan:SetText("Rescan")
+  rescan:SetPoint("LEFT", atext, "RIGHT", 12, 0)
+  rescan:SetScript("OnClick", function() U.Scan(true); refreshList() end)
+  tooltipFor(rescan, "Score every quest reward again (it also rescans by itself after gear changes, level-ups and turn-ins).")
+
+  upBar.summary = upBar:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+  upBar.summary:SetPoint("LEFT", rescan, "RIGHT", 12, 0)
+  upBar.summary:SetPoint("RIGHT", -8, 0)
+  upBar.summary:SetJustifyH("LEFT")
 end
 
 ---------------------------------------------------------------------------
@@ -342,7 +394,13 @@ local function rowTooltip(row)
   GameTooltip:AddLine(D.ZoneName(e.zone), 0.8, 0.8, 0.8)
   GameTooltip:AddLine(style.label, style.color[1], style.color[2], style.color[3])
   if e.note then GameTooltip:AddLine(iconMarkup(ICON.note, 12) .. " " .. e.note, 0.6, 0.9, 1, true) end
-  if e.gearItem then GameTooltip:AddLine("Rewards gear: " .. (D.I("name", e.gearItem) or "item"), 0.6, 1, 0.6) end
+  local up = U.Get(e.id)
+  if up then
+    GameTooltip:AddLine(("Upgrade: %s  %s"):format(D.I("name", up.itemId) or "item", U.Label(up)), 0.3, 1, 0.3)
+    if up.scale then GameTooltip:AddLine("Pawn scale: " .. up.scale, 0.7, 0.7, 0.7) end
+  elseif e.gearItem then
+    GameTooltip:AddLine("Rewards gear: " .. (D.I("name", e.gearItem) or "item"), 0.8, 0.8, 0.8)
+  end
   GameTooltip:AddLine(" ")
   GameTooltip:AddLine("Click: details   Right-click: add/remove from plan", 0.6, 0.6, 0.6)
   GameTooltip:AddLine("Shift-click: link in chat", 0.6, 0.6, 0.6)
@@ -370,14 +428,17 @@ local function updateRows()
       row.sub:SetText(e.sub or "")
 
       if e.gearItem == nil then e.gearItem = D.GearRewardItem(e.id) or false end
-      if e.gearItem then
-        row.reward:SetTexture(itemIcon(e.gearItem))
+      local up = U.Get(e.id)
+      row.upArrow:SetShown(up and true or false)
+      local shown = up and up.itemId or e.gearItem
+      if shown then
+        row.reward:SetTexture(itemIcon(shown))
         row.reward:SetTexCoord(0.08, 0.92, 0.08, 0.92)
         row.reward:Show(); row.rewardEdge:Show()
       else
         row.reward:Hide(); row.rewardEdge:Hide()
       end
-      row.star:SetShown(activeTab ~= 3 and QP.IsPlanned(e.id))
+      row.star:SetShown(activeTab ~= TAB_PLAN and QP.IsPlanned(e.id))
       local sel = e.id == selectedId
       row.sel:SetShown(sel)
       row.selBar:SetShown(sel)
@@ -439,6 +500,11 @@ local function buildRow(i)
   row.rewardEdge:SetPoint("TOPLEFT", row.reward, "TOPLEFT", -1, 1)
   row.rewardEdge:SetPoint("BOTTOMRIGHT", row.reward, "BOTTOMRIGHT", 1, -1)
   row.rewardEdge:SetColorTexture(0, 0, 0, 0.8)
+  row.upArrow = row:CreateTexture(nil, "OVERLAY", nil, 2)
+  row.upArrow:SetSize(14, 14)
+  row.upArrow:SetPoint("BOTTOMLEFT", row.reward, "BOTTOMLEFT", -5, -3)
+  setIcon(row.upArrow, ICON.upgrade)
+  row.upArrow:Hide()
   row.star = row:CreateTexture(nil, "OVERLAY")
   row.star:SetSize(14, 14)
   row.star:SetPoint("RIGHT", row.reward, "LEFT", -5, 0)
@@ -847,7 +913,7 @@ local function fillItem(b, itemId, link)
   b.Icon:SetTexture(itemIcon(itemId))
   b.IconBorder:SetVertexColor(1, 1, 1)
   b.IconBorder:Show()
-  b.arrow:Hide()
+  b.arrow:SetShown(b.forceArrow and true or false)
   b.Name:SetTextColor(1, 1, 1)
   b.Name:SetText(D.I("name", itemId) or "")
   if not Item or not Item.CreateFromItemID then return end
@@ -862,13 +928,13 @@ local function fillItem(b, itemId, link)
     b.Name:SetText(item:GetItemName() or b.Name:GetText())
     if l and PawnShouldItemLinkHaveUpgradeArrow then
       local up = pcallret(PawnShouldItemLinkHaveUpgradeArrow, l, true)
-      b.arrow:SetShown(up and true or false)
+      if up ~= nil then b.arrow:SetShown(up or b.forceArrow or false) end
     end
   end)
 end
 
 -- items: list of itemIds or item links, two tiles per row
-function P.Items(items)
+function P.Items(items, upgradeItemId)
   local col, cols = 0, 2
   local colW = (CHILD_W - 32) / cols
   for _, it in ipairs(items) do
@@ -877,6 +943,7 @@ function P.Items(items)
     if itemId then
       local b = take("items", itemFactory)
       b:SetPoint("TOPLEFT", 18 + col * colW, y)
+      b.forceArrow = (upgradeItemId and itemId == upgradeItemId) or nil
       fillItem(b, itemId, link)
       col = col + 1
       if col >= cols then col = 0; y = y - 46 end
@@ -1027,6 +1094,12 @@ local function render(id)
     { style.label, sc[1], sc[2], sc[3], reason, spec },
   }
   if planned then chips[#chips + 1] = { "In plan", 1, 0.82, 0, "This quest is in your plan.", ICON.star } end
+  local up = U.Get(id)
+  if up then
+    local tip = ("%s is an upgrade for you: %s"):format(D.I("name", up.itemId) or "A reward", U.Label(up))
+    if up.scale then tip = tip .. " (Pawn: " .. up.scale .. ")" end
+    chips[#chips + 1] = { "Upgrade " .. U.Label(up), 0.35, 1, 0.35, tip, ICON.upgrade }
+  end
   P.Chips(chips, 64)
   y = min(y, top - 48)
   if reason then P.Text(reason, { font = "GameFontBlack", x = 64, color = T.warn, gap = 4 }) end
@@ -1139,22 +1212,29 @@ local function render(id)
       P.Stat(ICON.rewards, "Reputation", ("%s %+d"):format(D.FactionName(rep[1]), rep[2] or 0), T.link)
     end
   end
+  if up then
+    any = true
+    P.Stat(ICON.upgrade, up.scale and ("Upgrade for you  -  Pawn: " .. up.scale) or "Upgrade for you",
+      (D.I("name", up.itemId) or "Reward") .. "  " .. U.Label(up), T.good, nil)
+    if up.existing then P.Text("Replaces " .. up.existing, { font = "GameFontBlackSmall", x = 48, color = T.muted, gap = 6 }) end
+  end
+  local upItem = up and up.itemId
   if logRewards and (#logRewards.choices > 0 or #logRewards.fixed > 0) then
     any = true
     if #logRewards.choices > 0 then
       P.Text("Choose one of these rewards:", { font = "GameFontBlack", x = 18, color = T.sub, gap = 6 })
-      P.Items(logRewards.choices)
+      P.Items(logRewards.choices, upItem)
     end
     if #logRewards.fixed > 0 then
       P.Text("You will also receive:", { font = "GameFontBlack", x = 18, color = T.sub, gap = 6 })
-      P.Items(logRewards.fixed)
+      P.Items(logRewards.fixed, upItem)
     end
   else
     local items = D.RewardItems(id)
     if #items > 0 then
       any = true
       P.Text(#items > 1 and "Item rewards (usually choose one):" or "Item reward:", { font = "GameFontBlack", x = 18, color = T.sub, gap = 6 })
-      P.Items(items)
+      P.Items(items, upItem)
     elseif not D.IndexReady() then
       P.Text("Item rewards appear once indexing finishes.", { font = "GameFontBlackSmall", x = 18, color = T.muted })
     end
@@ -1293,6 +1373,27 @@ local function refreshNear()
   statusText:SetText(area and (#results .. " quests you can pick up in " .. D.ZoneName(area)) or "Your zone is not mapped.")
 end
 
+local function refreshUpgrades()
+  wipe(data)
+  local s = U.Settings()
+  if upBar.ahead and not upBar.ahead:HasFocus() then upBar.ahead:SetText(s.ahead) end
+  upBar.avail:SetChecked(s.availableOnly)
+  if U.state ~= "ready" then
+    statusText:SetText("Checking quest rewards...")
+    upBar.summary:SetText("")
+    return
+  end
+  for _, r in ipairs(U.List()) do
+    local e = entryFromIndex(r.entry, colorText(U.Label(r), 0.3, 1, 0.3) .. "  " .. (D.I("name", r.itemId) or "") ..
+      SEP .. "Requires " .. r.entry[5] .. SEP .. D.ZoneName(r.entry[6]))
+    e.gearItem = r.itemId
+    data[#data + 1] = e
+  end
+  upBar.summary:SetText(U.method == "pawn" and "Scored with Pawn" or "Scored by item level  -  install Pawn for stat-based scoring")
+  statusText:SetText(#data == 0 and "No upgrade rewards found in this level range." or
+    (#data .. " quests reward an upgrade  -  right-click to plan"))
+end
+
 local function refreshPlan()
   wipe(data)
   local totalXP, todo = 0, 0
@@ -1333,6 +1434,13 @@ local function showIndexState()
     progressBar.text:SetText(("Indexing quests...  %d%%"):format((D.progress or 0) * 100))
     return false
   end
+  if activeTab == TAB_UPGRADES and U.state == "scanning" then
+    progressBar:Show()
+    statusText:Hide()
+    progressBar:SetValue(U.progress or 0)
+    progressBar.text:SetText(("Checking quest rewards...  %d%%"):format((U.progress or 0) * 100))
+    return true
+  end
   progressBar:Hide()
   statusText:Show()
   return true
@@ -1340,18 +1448,22 @@ end
 
 refreshList = function()
   if not frame or not frame:IsShown() then return end
+  if D.IndexReady() and U.dirty and U.state ~= "scanning" then U.Scan() end
   local ready = showIndexState()
-  frame.toolbar:SetShown(activeTab ~= 3)
-  planBar:SetShown(activeTab == 3)
-  if activeTab == 3 then refreshPlan()
+  frame.toolbar:SetShown(activeTab == TAB_BROWSE or activeTab == TAB_NEAR)
+  planBar:SetShown(activeTab == TAB_PLAN)
+  upBar:SetShown(activeTab == TAB_UPGRADES)
+  if activeTab == TAB_PLAN then refreshPlan()
   elseif ready then
-    if activeTab == 1 then refreshBrowse() else refreshNear() end
+    if activeTab == TAB_BROWSE then refreshBrowse()
+    elseif activeTab == TAB_NEAR then refreshNear()
+    else refreshUpgrades() end
   else
     wipe(data)
   end
-  if tabs and tabs[3] then
-    tabs[3]:SetText(("My Plan (%d)"):format(#QP.char.plan))
-    if PanelTemplates_TabResize then pcall(PanelTemplates_TabResize, tabs[3], 0) end
+  if tabs and tabs[TAB_PLAN] then
+    tabs[TAB_PLAN]:SetText(("My Plan (%d)"):format(#QP.char.plan))
+    if PanelTemplates_TabResize then pcall(PanelTemplates_TabResize, tabs[TAB_PLAN], 0) end
   end
   updateRows()
   if reorderUpdate then reorderUpdate() end
@@ -1377,7 +1489,7 @@ end
 
 local function buildTabs()
   tabs = {}
-  local labels = { "Browse", "Near Me", "My Plan" }
+  local labels = { "Browse", "Near Me", "Upgrades", "My Plan" }
   for i, label in ipairs(labels) do
     local t = create("Button", "QuestPlannerFrameTab" .. i, frame, "PanelTabButtonTemplate", "CharacterFrameTabButtonTemplate", "UIPanelButtonTemplate")
     t:SetID(i)
@@ -1409,7 +1521,7 @@ local function buildPlanReorder()
   tooltipFor(down, "Move the selected quest later in your plan.")
   frame.reorder = { up, down }
   reorderUpdate = function()
-    local show = activeTab == 3 and selectedId and QP.IsPlanned(selectedId)
+    local show = activeTab == TAB_PLAN and selectedId and QP.IsPlanned(selectedId)
     up:SetShown(show and true or false); down:SetShown(show and true or false)
   end
 end
@@ -1435,6 +1547,11 @@ local function ensureFrame()
     if D.state == "ready" then QP.Refresh() else showIndexState() end
   end)
   QP.OnPlanChanged(function() QP.Refresh() end)
+  U.OnUpdate(function()
+    if not frame:IsShown() then return end
+    if U.state == "ready" then QP.Refresh()
+    elseif activeTab == TAB_UPGRADES then showIndexState() end
+  end)
   selectTab(1)
   renderWelcome("Plan your next quests.")
 end

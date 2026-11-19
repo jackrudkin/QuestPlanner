@@ -99,7 +99,38 @@ C_Map = {
 }
 UiMapPoint = { CreateFromCoordinates = function(...) return { ... } end }
 C_SuperTrack = { SetSuperTrackedUserWaypoint = function() end }
-C_Item = { GetItemIconByID = function() return 133000 end }
+-- Item data: 7001 is a one-hand sword (ilvl 45), 7002 a shield. 7001 only "loads" on the 4th request (tests the retry path).
+__now = 0
+GetTime = function() return __now end
+local itemRows = {
+  [7001] = { "Den Cleaver", 2, 45, 38, "INVTYPE_WEAPON", 2, 7 },
+  [7002] = { "Den Shield", 2, 44, 38, "INVTYPE_SHIELD", 4, 6 },
+  [8000] = { "Old Sword", 2, 35, 30, "INVTYPE_WEAPON", 2, 7 },
+  [8001] = { "Old Axe", 2, 38, 30, "INVTYPE_WEAPON", 2, 0 },
+}
+local loads = {}
+local function itemInfo(item)
+  local id = type(item) == "number" and item or tonumber(tostring(item):match("item:(%d+)"))
+  local r = id and itemRows[id]
+  if not r then return nil end
+  loads[id] = (loads[id] or 0) + 1
+  if id == 7001 and loads[id] <= 3 then return nil end
+  local link = "|cff1eff00|Hitem:" .. id .. "::::|h[" .. r[1] .. "]|h|r"
+  return r[1], link, r[2], r[3], r[4], "Armor", "Misc", 1, r[5], 134400, 100, r[6], r[7]
+end
+C_Item = { GetItemIconByID = function() return 133000 end, GetItemInfo = itemInfo, RequestLoadItemDataByID = function() end }
+GetInventoryItemLink = function(_, slot)
+  if slot == 16 then return "|Hitem:8000::::|h[Old Sword]|h" elseif slot == 17 then return "|Hitem:8001::::|h[Old Axe]|h" end
+end
+-- Pawn (installed by the runner only for the Pawn pass)
+__PawnMock = {
+  PawnIsReady = function() return true end,
+  PawnGetItemData = function(link) return { Link = link, ID = tonumber(link:match("item:(%d+)")) } end,
+  PawnIsItemAnUpgrade = function(item)
+    if item.ID == 7001 then return { { ScaleName = "F", LocalizedScaleName = "Warrior: Fury", PercentUpgrade = 0.124, ExistingItemLink = "[Old Sword]" } } end
+    if item.ID == 7002 then return { { ScaleName = "F", LocalizedScaleName = "Warrior: Fury", PercentUpgrade = 0.05 } } end
+  end,
+}
 Item = { CreateFromItemID = function(_, id) return { ContinueOnItemLoad = function(self, cb) cb() end, GetItemQuality = function() return 2 end,
   GetItemLink = function() return "|Hitem:" .. id .. "|h[x]|h" end, GetItemName = function() return "Item " .. id end } end }
 ITEM_QUALITY_COLORS = { [2] = { r = 0, g = 1, b = 0 } }

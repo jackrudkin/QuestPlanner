@@ -12,7 +12,7 @@ QP.Print = msg
 ---------------------------------------------------------------------------
 -- Saved variables
 ---------------------------------------------------------------------------
-local defaults = { minimap = { angle = 200, hide = false }, waypoint = "auto" }
+local defaults = { minimap = { angle = 200, hide = false }, waypoint = "auto", upgrades = { ahead = 3, availableOnly = false } }
 
 local function charKey()
   return (UnitName("player") or "?") .. "-" .. (GetRealmName() or "?")
@@ -224,7 +224,7 @@ local function createMinimapButton()
   border:SetPoint("TOPLEFT")
   b:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
   b:SetScript("OnClick", function(_, button)
-    if button == "RightButton" then QP.ShowTab(3) else QP.Toggle() end
+    if button == "RightButton" then QP.ShowTab(4) else QP.Toggle() end
   end)
   b:SetScript("OnDragStart", function(self)
     self:SetScript("OnUpdate", function()
@@ -269,8 +269,9 @@ SlashCmdList.QUESTPLANNER = function(input)
   local cmd, rest = input:match("^%s*(%S*)%s*(.-)%s*$")
   cmd = (cmd or ""):lower()
   if cmd == "" then QP.Toggle()
-  elseif cmd == "plan" then QP.ShowTab(3)
+  elseif cmd == "plan" then QP.ShowTab(4)
   elseif cmd == "near" then QP.ShowTab(2)
+  elseif cmd == "upgrades" or cmd == "up" then QP.ShowTab(3)
   elseif cmd == "add" and tonumber(rest) then QP.AddToPlan(tonumber(rest))
   elseif cmd == "minimap" then
     QP.db.minimap.hide = not QP.db.minimap.hide
@@ -288,6 +289,7 @@ end
 ---------------------------------------------------------------------------
 -- Events
 ---------------------------------------------------------------------------
+local equipTimer
 local ev = CreateFrame("Frame")
 ev:RegisterEvent("ADDON_LOADED")
 ev:RegisterEvent("PLAYER_LOGIN")
@@ -297,6 +299,7 @@ ev:RegisterEvent("QUEST_ACCEPTED")
 ev:RegisterEvent("QUEST_REMOVED")
 ev:RegisterEvent("PLAYER_LEVEL_UP")
 ev:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+ev:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 
 ev:SetScript("OnEvent", function(_, event, arg1)
   if event == "ADDON_LOADED" then
@@ -313,10 +316,19 @@ ev:SetScript("OnEvent", function(_, event, arg1)
   elseif event == "QUEST_TURNED_IN" then
     if arg1 then D.completed[arg1] = true end
     syncDone()
+    QP.Upgrades.MarkDirty()
     if QP.Refresh then QP.Refresh() end
   elseif event == "PLAYER_LEVEL_UP" then
     D.player.level = arg1 or UnitLevel("player")
+    QP.Upgrades.MarkDirty()
     if QP.Refresh then QP.Refresh() end
+  elseif event == "PLAYER_EQUIPMENT_CHANGED" then
+    -- Gear swaps fire this once per slot: rescore once, a moment after the last one.
+    QP.Upgrades.MarkDirty()
+    if not equipTimer then
+      equipTimer = true
+      C_Timer.After(1.5, function() equipTimer = nil; if QP.Refresh then QP.Refresh() end end)
+    end
   else
     if QP.Refresh then QP.Refresh() end
   end

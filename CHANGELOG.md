@@ -1,5 +1,13 @@
 # QuestPlanner
 
+## 1.1.0
+
+- New **Upgrades** tab: quests whose rewards are gear upgrades for you, best first. Scored with Pawn when it's installed, otherwise by item level against what you wear. Look-ahead (default 3 levels above you), Available now filter, Rescan
+- Rescans by itself after gear changes, level-ups and turn-ins
+- Upgrade arrows on list rows, an Upgrade chip on quest pages, and the upgrade reward marked in the reward tiles
+- `/qp upgrades`
+- First CurseForge release
+
 ## 1.0.0
 
 First release.

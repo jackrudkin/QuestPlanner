@@ -11,7 +11,7 @@ read_globals = {
   -- Questie database
   "LibQuestieDB", "QuestDB", "NpcDB", "ObjectDB", "ItemDB",
   -- optional addons
-  "TomTom", "PawnShouldItemLinkHaveUpgradeArrow",
+  "TomTom", "PawnShouldItemLinkHaveUpgradeArrow", "PawnIsReady", "PawnGetItemData", "PawnIsItemAnUpgrade",
   -- WoW API
   "CreateFrame", "UIParent", "Minimap", "GameTooltip", "DEFAULT_CHAT_FRAME", "UISpecialFrames",
   "C_Timer", "C_Map", "C_Item", "C_QuestLog", "C_SuperTrack", "C_Texture", "C_AddOns", "UiMapPoint", "Item",
@@ -23,5 +23,5 @@ read_globals = {
   "ITEM_QUALITY_COLORS", "LOCALIZED_CLASS_NAMES_MALE", "hooksecurefunc", "debugprofilestop", "wipe", "tinsert",
   "time", "date", "bit", "strsplit", "strtrim", "CopyTable", "GetFactionInfoByID", "C_Reputation", "C_CreatureInfo",
   "GetAreaInfo", "Enum", "ChatFrameUtil", "ChatEdit_ChooseBoxForSend", "ChatEdit_ActivateChat", "LoadAddOn",
-  "GetQuestsCompleted", "GetQuestLogIndexByID", "C_TradeSkillUI", "GetQuestLink",
+  "GetQuestsCompleted", "GetQuestLogIndexByID", "C_TradeSkillUI", "GetQuestLink", "GetInventoryItemLink", "GetTime", "GetItemInfo",
 }

@@ -26,6 +26,13 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Check CurseForge secret
+        run: |
+          if grep -q '^## X-Curse-Project-ID:' QuestPlanner.toc && [ -z "$CF_API_KEY" ]; then
+            echo "::error::QuestPlanner.toc has X-Curse-Project-ID but the CF_API_KEY secret is missing. Add it under Settings > Secrets and variables > Actions, then re-run this workflow."
+            exit 1
+          fi
+
       - name: Tag new version
         id: tag
         run: |

@@ -279,6 +279,7 @@ function D.BuildIndex()
 end
 
 function D.IndexReady() return D.state == "ready" end
+function D.AllEntries() return index or {} end
 
 ---------------------------------------------------------------------------
 -- Status

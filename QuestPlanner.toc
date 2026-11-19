@@ -1,9 +1,10 @@
 ## Interface: 16001
 ## Title: QuestPlanner
-## Notes: Plan your questing in WoW Forever: look up any quest, see its chain, rewards and locations, and build a saved quest plan. Uses Questie's database.
+## Notes: Plan your questing in WoW Forever: look up any quest, see its chain, rewards and locations, find quests that reward gear upgrades, and build a saved quest plan. Uses Questie's database.
 ## Author: Jack
-## Version: 1.0.0
+## Version: 1.1.0
 ## X-License: GPL-3.0-or-later
+## X-Curse-Project-ID: 1817288
 ## X-Website: https://github.com/jackrudkin/QuestPlanner
 ## OptionalDeps: QuestieDB, Questie, Pawn, TomTom
 ## SavedVariables: QuestPlannerDB
@@ -14,5 +15,6 @@
 ## AddonCompartmentFuncOnLeave: QuestPlanner_OnCompartmentLeave
 
 Data.lua
+Upgrades.lua
 Core.lua
 UI.lua

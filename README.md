@@ -1,13 +1,13 @@
 # QuestPlanner (WoW Forever)
 
-Plan your questing without alt-tabbing. Look up any quest, see who gives it, what to do, where to go and what it rewards, follow the whole chain, and save a quest plan per character.
+Plan your questing without alt-tabbing. Look up any quest, see who gives it, what to do, where to go and what it rewards, follow the whole chain, find the quests whose rewards are upgrades for you, and save a quest plan per character.
 
 Built for **WoW Forever 1.60.1** (`## Interface: 16001`). Uses Questie's quest database, so it ships no data of its own and stays small (~2,500 lines of Lua, no libraries).
 
 ## Requirements
 
 - **[Questie](https://www.curseforge.com/wow/addons/questie)** (QuestPlanner reads the QuestieDB database that comes with it)
-- Optional: **Pawn** (green upgrade arrows on reward items), **TomTom** (waypoint arrow; without it QuestPlanner uses the game's map pin)
+- Optional: **Pawn** (scores rewards for the Upgrades tab using your Pawn scales, and adds green arrows on reward items), **TomTom** (waypoint arrow; without it QuestPlanner uses the game's map pin)
 
 ## Opening it
 
@@ -19,9 +19,18 @@ Built for **WoW Forever 1.60.1** (`## Interface: 16001`). Uses Questie's quest d
 |---|---|
 | **Browse** | Search by quest name, quest ID or zone. Filters: level range (defaults to your level -3 / +2), For me (your race and class), Hide done, Gear rewards only, This zone |
 | **Near Me** | Quests you can pick up now whose giver is in your zone, nearest first, with distance |
+| **Upgrades** | Quests whose rewards are upgrades for you, best first. Covers quests up to N levels above you (default 3), with an Available now filter. See below |
 | **My Plan** | Your saved quests in order, with notes. Sort by zone or level, reorder with Up/Down, clear completed, and see the XP left at your level |
 
-List rows show the quest level (coloured by difficulty), status, zone, a star for planned quests and the icon of any gear reward.
+List rows show the quest level (coloured by difficulty), status, zone, a star for planned quests and the icon of any gear reward, with a green arrow when it's an upgrade.
+
+## Upgrades
+
+- **With Pawn**: every weapon and armor reward is checked with Pawn's own upgrade test (`PawnIsItemAnUpgrade`): your visible scales, your best armor type, one- vs two-handed weapons, and the best items Pawn knows you own. The list shows Pawn's percentage, or **Empty slot** when you have nothing in that slot.
+- **Without Pawn**: item level against what you wear in that slot, only for the same armor or weapon type you're wearing there (rings, necks, trinkets and cloaks always count).
+- Quests are checked if your race and class can take them, you haven't done them, their required level is at most your level + N, and they are no more than 10 levels below you.
+- It rescans by itself after gear changes, level-ups and turn-ins. Quest pages show an **Upgrade** chip, and the reward tile gets a green arrow.
+- The database doesn't say which rewards are choose-one, so each quest is ranked by its single best reward.
 
 ## Quest page
 
@@ -51,7 +60,7 @@ Shown on the quest-log parchment, in Blizzard's style:
 | `/qp` | Toggle the window |
 | `/qp <text>` | Search |
 | `/qp <questID>` | Open a quest |
-| `/qp plan`, `/qp near` | Open a tab |
+| `/qp plan`, `/qp near`, `/qp upgrades` | Open a tab |
 | `/qp add <questID>` | Add to plan |
 | `/qp minimap` | Show/hide the minimap button |
 | `/qp waypoints` | Toggle TomTom arrow vs game map pin |
